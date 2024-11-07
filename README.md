@@ -30,6 +30,66 @@ The script requires the following tools and commands:
 
 Ensure all dependencies are installed before running the script.
 
+## Usage to create a SSH Tunnel with proxy
+
+### Setup VM and NETWORK Configuration
+
+To access the vm follow this steps
+
+1. Clone the repository: `git clone https://github.com/username/bridge-setup-script.git`
+2. Download the disk image and place it into the root directory of the repository
+3. Inside of the repository folder `cd bridge-setup-script`,
+   Run the script: `./setup.sh` and follow the prompts, it will generate all required scripts
+   to access and configure the VM Network configuration.
+   - Choose a name for the bridge
+   - Select a host interface use `ip link show` to list available interfaces
+   - Enter the octet for the bridge IP, e.g: (123) `192.168.1.[123]`.
+   - Enter the octet for the VM IP, e.g: (214) `192.168.2.[214]`.
+   - Enter the Subnet Mask, e.g: `255.255.255.0`.
+   - Enter the Gateway IP, e.g: `192.168.1.1`.
+   - Enter the DNS Server IP, e.g: `192.168.1.1`.
+4. Run the script: `./start_vm.sh`, it will start the VM in the background.
+5. Run the script: `./access_vm.sh`, it will open a FreeRDP session to the VM.
+
+### Troubleshooting
+
+It could be that the dhcp server is applying a dynamic IP to the VM. In that case
+stop all running scripts the run following command in your terminal, of course
+adjust the path `<REPLACE WITH PATH>` and the name of the bridge `<REPLACE WITH BRIDGE NAME>`.
+
+```bash
+# Start the virtual machine
+qemu-system-x86_64 \
+    -machine q35,accel=kvm \
+    -smp 4 \
+    -enable-kvm \
+    -device intel-iommu \
+    -cpu host \
+    -m 8G \
+    -drive file="<REPLACE WITH PATH>/disk.img",index=0,media=disk,format=qcow2,if=virtio,l2-cache-size=10M \
+    -rtc clock=vm,base=localtime \
+    -netdev bridge,id=net0,br=<REPLACE WITH BRIDGE NAME> \
+    -device virtio-net-pci,netdev=net0 \
+```
+
+This opens the VM in a separate window so that you can access it from the host so that
+you can check the IP.
+
+Use `./setup.sh` and Delete the previous bridge configuration and the files, then
+repeat the previous steps and you should be able to access the VM.
+
+## Configure VM Network and enable SSH Server
+
+After running `./setup.sh` you'll find `./shared/configure_network.bat` file which
+sets up the network configuration and enables SSH server.
+
+#### On the host
+
+1. Run the script: `./start_vm.sh`, it will start the VM in the background.
+2. Run the script: `./access_vm.sh`, it will open a FreeRDP session to the VM.
+
+#### On the VM
+
 ## Script Structure
 
 ### Key Files and Directories
