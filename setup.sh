@@ -209,6 +209,37 @@ function create_bat_script() {
 @echo off
 setlocal
 
+REM Install optional feature 'OpenSSH Server'
+echo Installing OpenSSH Server...
+dism /online /Add-Capability /CapabilityName:OpenSSH.Server~~~~0.0.1.0
+
+REM Start SSH service and set it to start automatically
+echo Starting SSH service and setting it to automatic...
+sc start sshd
+sc config sshd start=auto
+
+REM Add firewall rules for SSH (Port 21 and 22)
+echo Configuring firewall rules for SSH ports 21 and 22...
+netsh advfirewall firewall add rule name="SSH Port 21" dir=in action=allow protocol=TCP localport=21
+netsh advfirewall firewall add rule name="SSH Port 22" dir=in action=allow protocol=TCP localport=22
+
+REM Configure SSH keys and authorized_keys file
+set "ssh_dir=%USERPROFILE%\\.ssh"
+set "authorized_keys=%ssh_dir%\\authorized_keys"
+
+if not exist "%ssh_dir%" (
+    echo Creating SSH directory in user profile...
+    mkdir "%ssh_dir%"
+)
+
+if not exist "%authorized_keys%" (
+    echo Creating authorized_keys file...
+    type nul > "%authorized_keys%"
+)
+
+echo Setting permissions for authorized_keys file...
+icacls "%authorized_keys%" /inheritance:r /grant "%USERNAME%":F
+
 REM Configure network settings based on bridge configuration
 set "host_ip=${host_ip}"
 set "subnet_mask=${subnet_mask}"
@@ -261,8 +292,8 @@ fi
 function prompt_action() {
     # Check if there are any existing bridges in the configuration
     if jq -e '. | length > 0' "$CONFIG_FILE" >/dev/null; then
-        PS3="Select an option (1 or 2): "
-        options=("Setup a new virtual bridge" "Remove an existing virtual bridge")
+        local PS3="Select an option (1 or 2): "
+        local options=("Setup a new virtual bridge" "Remove an existing virtual bridge")
         select opt in "${options[@]}"; do
             case $REPLY in
                 1) return 0 ;; # Setup
@@ -274,6 +305,18 @@ function prompt_action() {
         echo "No bridges are currently configured. Only setup is available."
         return 0 # Proceed with setup since no bridges exist
     fi
+}
+
+function propmpt_delete_scripts() {
+  local PS3="Do you want to remove the scripts (1 or 2): "
+  local options=("Delete the scripts" "Keep the scripts")
+  select o in "${options[@]}"; do
+      case $REPLY in
+          1) return 0 ;; # Keep
+          2) return 1 ;; # Remove
+          *) echo "Invalid option. Please choose 1 or 2." ;;
+      esac
+  done
 }
 
 # Function to persist bridge configuration to JSON file
@@ -337,10 +380,29 @@ function remove_bridge() {
     fi
 
     echo "Bridge $bridge_name has been removed."
+
+    # Prompt to remove scripts
+    if propmpt_delete_scripts; then
+      if [[ -f "$START_VM_SCRIPT" ]]; then
+        rm "$START_VM_SCRIPT"
+      fi
+
+      if [[ -f "$ACCESS_VM_SCRIPT" ]]; then
+        rm "$ACCESS_VM_SCRIPT"
+      fi
+
+      if [[ -f "$BAT_FILE" ]]; then
+        rm "$BAT_FILE"
+      fi
+
+      echo "Scripts have been removed."
+    else
+      echo "Scripts have not been removed."
+    fi
 }
 
 function add_bridge() {
-# Setup a new virtual bridge
+  # Setup a new virtual bridge
   bridge_name=$(prompt_until_valid "Enter the name of the network bridge: ")
 
   if brctl show | grep -q "^$bridge_name"; then
@@ -455,7 +517,6 @@ function add_bridge() {
 if prompt_action; then
     # Add a new virtual bridge
     add_bridge
-
 else
     # Remove an existing virtual bridge
     remove_bridge
